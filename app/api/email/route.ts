@@ -1,67 +1,38 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import nodemailer from "nodemailer";
-import { prisma } from "@/lib/prisma";
+import { getSmtpConfig, isSmtpConfigured, createTransporter } from "@/lib/smtp";
 
-// 从 DB 加载 SMTP 配置
-async function getSmtpConfig() {
-  const settings = await prisma.siteSetting.findMany({
-    where: {
-      key: { in: ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_email", "smtp_from_name"] },
-    },
-  });
-  const map: Record<string, string> = {};
-  for (const s of settings) map[s.key] = s.value;
-  return map;
-}
-
-// POST /api/email — 发送邮件
+// POST /api/email — 发送邮件（支持 test_mode 返回详细信息）
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { to, subject, message, from_name, reply_to } = body;
-
-    if (!to && !body.to_smtp) {
-      // 如果没有指定收件人，从设置获取
-      const settings = await getSmtpConfig();
-      if (!settings.smtp_from_email) {
-        return Response.json({ error: "SMTP not configured" }, { status: 400 });
-      }
-    }
+    const { to, subject, message, from_name, reply_to, test_mode } = body;
 
     const smtp = await getSmtpConfig();
 
-    if (!smtp.smtp_host || !smtp.smtp_user || !smtp.smtp_pass) {
-      return Response.json({ error: "SMTP not configured" }, { status: 400 });
+    if (!isSmtpConfigured(smtp)) {
+      return Response.json({ error: "SMTP not configured. Go to Settings > SMTP Email to configure." }, { status: 400 });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: smtp.smtp_host,
-      port: parseInt(smtp.smtp_port || "587"),
-      secure: smtp.smtp_port === "465",
-      auth: {
-        user: smtp.smtp_user,
-        pass: smtp.smtp_pass,
-      },
-    });
+    const transporter = createTransporter(smtp);
 
     const fromEmail = smtp.smtp_from_email || smtp.smtp_user;
-    const fromName = smtp.smtp_from_name || "Website Contact";
+    const fromName = from_name || smtp.smtp_from_name || "Website Contact";
 
-    // 构建 HTML 邮件
+    // Build HTML
     const htmlMessage = message
       ? `<div style="font-family:Arial,sans-serif;padding:20px;max-width:600px">
           <div style="background:#f8f8f8;padding:20px;border-radius:8px">
             ${message.replace(/\n/g, "<br/>")}
           </div>
           <p style="color:#999;font-size:12px;margin-top:20px">
-            Sent from gytinbox.com contact form
+            Sent from gytinbox.com
           </p>
         </div>`
       : "";
 
-    const mailOptions: nodemailer.SendMailOptions = {
+    const mailOptions: Record<string, any> = {
       from: `"${fromName}" <${fromEmail}>`,
       to: to || fromEmail,
       subject: subject || "New Contact Form Submission",
@@ -72,11 +43,33 @@ export async function POST(req: NextRequest) {
       mailOptions.replyTo = reply_to;
     }
 
+    // Verify connection first (test mode)
+    if (test_mode) {
+      try {
+        await transporter.verify();
+      } catch (verifyErr: any) {
+        return Response.json({
+          error: "SMTP connection verification failed.",
+          details: `Verification error: ${verifyErr.message || "Unknown error"}\nHost: ${smtp.smtp_host}:${smtp.smtp_port}\nEncryption: ${smtp.smtp_encryption}\nAuth: ${smtp.smtp_auth === "true" ? "Yes" : "No"}`,
+        }, { status: 400 });
+      }
+    }
+
     await transporter.sendMail(mailOptions);
 
-    return Response.json({ success: true });
+    const detailLines = test_mode
+      ? `✓ Server: ${smtp.smtp_host}:${smtp.smtp_port}\n✓ Encryption: ${smtp.smtp_encryption}\n✓ Auth: ${smtp.smtp_auth === "true" ? "On" : "Off"}\n✓ From: ${fromEmail}\n✓ To: ${to || fromEmail}`
+      : "";
+
+    return Response.json({
+      success: true,
+      details: detailLines || undefined,
+    });
   } catch (err: any) {
     console.error("Email send error:", err);
-    return Response.json({ error: err.message || "Failed to send email" }, { status: 500 });
+    return Response.json({
+      error: err.message || "Failed to send email",
+      details: err.code ? `Error code: ${err.code}\nCommand: ${err.command || "N/A"}\nResponse: ${err.response || "N/A"}` : undefined,
+    }, { status: 500 });
   }
 }

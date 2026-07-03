@@ -20,6 +20,25 @@ model User {
   password  String   // bcrypt hash
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  passwordResetTokens PasswordResetToken[]
+}
+
+// ─── Password Reset Tokens ──────────────────
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  email     String
+  code      String   // 6-digit code
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    Int?
+
+  @@index([email, code])
+  @@map("password_reset_tokens")
 }
 
 // ─── Pages (about-us, custom-tins, etc.) ─────

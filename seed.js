@@ -22,6 +22,9 @@ async function main() {
     site_description: "Professional manufacturer.", contact_email: "contact@example.com",
     contact_phone: "+1 (555) 000-0000", product_slug: "products", category_slug: "categories",
     cta_text: "Contact Us", cta_url: "/contact", inquiry_button_text: "Send Inquiry",
+    smtp_host: "", smtp_port: "587", smtp_encryption: "tls",
+    smtp_autotls: "true", smtp_auth: "true", smtp_user: "", smtp_pass: "",
+    smtp_from_email: "", smtp_from_name: "Admin Panel",
     enable_lang_switcher: "true", show_cta_button: "true",
   };
   for (const [key, value] of Object.entries(defaults)) {
