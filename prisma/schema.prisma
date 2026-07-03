@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Windows dev: SQLite (no setup needed)
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+  // VPS production: PostgreSQL
+  // provider = "postgresql"
+  // url      = env("DATABASE_URL")
+}
+
+// ─── Admin User ──────────────────────────────
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String   // bcrypt hash
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Pages (about-us, custom-tins, etc.) ─────
+
+model Page {
+  id             Int      @id @default(autoincrement())
+  slug           String   @unique
+  title          String
+  content        String   @default("")
+  metaTitle      String?
+  metaDesc       String?
+  targetKeyword  String?
+  templateSlug   String   @default("default")
+  locale         String   @default("en")
+  translationGroupId String? // group English + translations
+  published      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─── Product Categories (standalone) ──────────
+
+model Category {
+  id                  Int      @id @default(autoincrement())
+  name                String
+  slug                String   @unique
+  description         String   @default("")
+  image               String?
+  sortOrder           Int      @default(0)
+  locale              String   @default("en")
+  translationGroupId  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("categories")
+}
+
+// ─── Product Types (e.g. "Tin Packaging", "Furniture", "Electronics") ─
+
+model ProductType {
+  id         Int       @id @default(autoincrement())
+  name       String    // e.g. "General Product"
+  slug       String    @unique
+  specFields String    @default("[]") // JSON: [{ label: "Weight", unit: "g" }, { label: "Material" }]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  products   Product[]
+
+  @@map("product_types")
+}
+
+// ─── Products ────────────────────────────────
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  legacyId    Int?     // original WP ID
+  title       String
+  slug        String   @unique
+  description String   @default("")
+  image       String?  // main/thumbnail image
+  shape       String?
+  diameter    String?
+  height      String?
+  width       String?
+  length      String?
+  depth       String?
+  volume      String?
+  weight      String?
+  tinplate    String?
+  sku         String?
+  application String?  // product application/use
+  keywords    String?  // product keywords
+  metaTitle   String?
+  metaDesc    String?
+  targetKeyword String?
+  video       String?  // video URL
+  supplierId  Int?     // supplier post ID
+  locale      String   @default("en")
+  translationGroupId String?
+  published       Boolean  @default(true)
+  moreDescription String   @default("")
+  typeId          Int?     // product type (nullable for backward compat)
+  type        ProductType? @relation(fields: [typeId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categories  ProductCategory[]
+  images      ProductImage[]
+  specs       ProductSpec[]
+  tabs        ProductTab[]
+  tabTemplate TabTemplate? @relation(fields: [tabTemplateId], references: [id])
+  tabTemplateId Int?
+}
+
+// ─── Tab Template ─────────────────────────────
+model TabTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String   @unique
+  tabDefs   String   @default("[]") // JSON: [{ icon: "fa-cube", name: "Specs" }, ...]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products  Product[]
+
+  @@map("tab_templates")
+}
+
+// ─── Product Tabs ──────────────────────────────
+model ProductTab {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  icon      String   @default("fa-file-lines")    // Font Awesome class
+  name      String   @default("Tab")
+  content   String   @default("")                 // RichEditor HTML
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_tabs")
+}
+
+// ─── Product Specs (EAV: Entity-Attribute-Value) ──────────────
+
+model ProductSpec {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String   // e.g. "Material", "Weight", "Color"
+  value     String   // e.g. "Stainless Steel", "500g"
+  sortOrder Int      @default(0)
+
+  @@index([productId])
+  @@map("product_specs")
+}
+
+model ProductCategory {
+  id        Int     @id @default(autoincrement())
+  name      String
+  slug      String
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([slug, productId])
+  @@index([slug])
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+// ─── Blog Posts ──────────────────────────────
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  legacyId  Int?
+  title     String
+  slug      String   @unique
+  content   String   @default("")
+  excerpt   String   @default("")
+  metaTitle String?
+  metaDesc  String?
+  image     String?
+  locale    String   @default("en")
+  translationGroupId String?
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Media Library ───────────────────────────
+
+model Media {
+  id        Int       @id @default(autoincrement())
+  filename  String
+  url       String
+  mimeType  String
+  width     Int?
+  height    Int?
+  fileSize  Int?
+  alt       String?
+  category  String    @default("image") // image | document
+  webpUrl   String?  // optimized WebP version
+  thumbUrl  String?  // 200px thumbnail WebP
+  mediumUrl String?  // 800px medium WebP
+  deletedAt DateTime? // soft-delete, null = active
+  createdAt DateTime  @default(now())
+}
+
+// ─── Site Settings ───────────────────────────
+
+model SiteSetting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String @default("")
+}

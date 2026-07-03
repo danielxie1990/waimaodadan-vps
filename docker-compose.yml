@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: product_site
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: change-me-in-production
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://app:change-me-in-production@postgres:5432/product_site"
+      JWT_SECRET: "change-this-to-a-random-secret-in-production"
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "npx prisma migrate deploy && npm start"
+
+volumes:
+  pgdata:

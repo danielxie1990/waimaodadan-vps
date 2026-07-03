@@ -1,0 +1,16 @@
+node_modules/
+.next/
+*.db
+*.db-journal
+.env
+.env.local
+.env.production
+out/
+dist/
+.DS_Store
+*.log
+deploy-source.zip
+gytinbox-deploy.zip
+deploy.sh
+extract.php
+.DS_Store

@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "files": {},
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-07-03",
+      "changes": [
+        "初始化版本系统",
+        "Menu Manager — Classic / Mega 菜单二选一",
+        "Media Library — 分类、搜索、回收站、WebP",
+        "图片自动优化 — WebP + 缩略图生成",
+        "前台编辑模式 — 铅笔快捷跳转后台",
+        "AdminToolbar — 底部工具栏可折叠",
+        "Header 设置 — 布局、背景色、透明模式、Sticky",
+        "Footer 设置 — 列管理、联系方式",
+        "多语言支持",
+        "分页组件 — Products/Pages/Posts/Categories"
+      ]
+    }
+  ]
+}
