@@ -129,6 +129,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
   });
 
+  // Invalidate product cache so frontend picks up changes immediately
+  const { invalidateCache } = await import("@/lib/db");
+  invalidateCache("PRODUCTS");
+  invalidateCache("PRODUCT");
+  invalidateCache("PRODUCT_SLUGS");
+  invalidateCache("PRODUCTS_BY_CATEGORY");
+
   return ok(product);
 }
 

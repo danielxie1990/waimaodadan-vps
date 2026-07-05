@@ -87,9 +87,9 @@ export function createTransporter(config: SmtpConfig) {
     host: config.smtp_host,
     port,
     secure,
-    tls: {
-      rejectUnauthorized: false, // 允许自签名证书
-    },
+    ...(process.env.NODE_ENV === 'development' ? {
+      tls: { rejectUnauthorized: false },
+    } : {}),
   } as any;
 
   // ignoreTLS

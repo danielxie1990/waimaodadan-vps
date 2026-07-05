@@ -36,6 +36,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
   });
 
+  // Invalidate posts cache
+  const { invalidateCache } = await import("@/lib/db");
+  invalidateCache("POSTS");
+  invalidateCache("POST");
+  invalidateCache("POST_SLUGS");
+
   return ok(post);
 }
 

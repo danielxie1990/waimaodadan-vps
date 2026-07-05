@@ -1,11 +1,97 @@
 import { prisma } from "./prisma";
 import { resolveDbSlug, cleanSlug, DEFAULT_LOCALE, normalizeLocale } from "./locale";
+import { cacheGet, cacheSet } from "./cache";
 
-async function safeDb<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+// ─── Safe DB wrapper ────────────────────────────
+// In development, let errors propagate so they're visible.
+// In production, return a fallback to prevent 500 pages.
+
+async function safeDb<T>(fn: () => Promise<T>, fallback: T, context = "db"): Promise<T> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[safeDb] Error in ${context}:`, err);
+      throw err;
+    }
+    console.error(`[safeDb] Error in ${context} (returning fallback):`, err);
     return fallback;
+  }
+}
+
+/**
+ * Fetch data with locale fallback in a single pass.
+ */
+async function withLocaleFallback<T = any>(
+  query: (locale: string) => Promise<T[]>,
+  locale: string | undefined,
+  cacheKey: string
+): Promise<T[]> {
+  const loc = normalizeLocale(locale);
+
+  // Check cache first
+  const cached = cacheGet<T[]>(`${cacheKey}:${loc}`);
+  if (cached) return cached;
+
+  const results = await query(loc);
+
+  // If no results for non-English locale, try English
+  if (results.length === 0 && loc !== DEFAULT_LOCALE) {
+    const enResults = await query(DEFAULT_LOCALE);
+    cacheSet(`${cacheKey}:${loc}`, enResults);
+    return enResults;
+  }
+
+  cacheSet(`${cacheKey}:${loc}`, results);
+  return results;
+}
+
+async function withLocaleFallbackSingle<T extends { locale?: string }>(
+  query: (locale: string) => Promise<T | null>,
+  locale: string | undefined,
+  cacheKey: string
+): Promise<T | null> {
+  const loc = normalizeLocale(locale);
+
+  const cached = cacheGet<T | null>(`${cacheKey}:${loc}`);
+  if (cached !== null && cached !== undefined) return cached;
+
+  let result = await query(loc);
+
+  if (!result && loc !== DEFAULT_LOCALE) {
+    result = await query(DEFAULT_LOCALE);
+  }
+
+  if (result) cacheSet(`${cacheKey}:${loc}`, result);
+  return result;
+}
+
+// ─── Cache keys ─────────────────────────────────
+
+const CACHE_KEYS = {
+  SETTINGS: "settings",
+  PRODUCTS: "products",
+  PRODUCT: "product",
+  PRODUCT_SLUGS: "product-slugs",
+  POSTS: "posts",
+  POST: "post",
+  POST_SLUGS: "post-slugs",
+  PAGES: "pages",
+  PAGE: "page",
+  CATEGORIES: "categories",
+  CATEGORY: "category",
+  PRODUCTS_BY_CATEGORY: "products-by-cat",
+} as const;
+
+// ─── Cache invalidation ─────────────────────────
+
+export function invalidateCache(type: keyof typeof CACHE_KEYS, locale?: string): void {
+  const { cacheDelete, cacheDeletePrefix } = require("./cache");
+  const prefix = CACHE_KEYS[type];
+  cacheDeletePrefix(`${prefix}:`);
+  // Also invalidate other locale variants
+  if (locale) {
+    cacheDelete(`${prefix}:${locale}`);
   }
 }
 
@@ -14,89 +100,80 @@ async function safeDb<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 export async function getPageBySlug(slug: string, locale?: string) {
   const loc = normalizeLocale(locale);
   const dbSlug = resolveDbSlug(slug, loc);
+  const cacheKey = `page:${dbSlug}:${loc}`;
+
+  const cached = cacheGet<any>(cacheKey);
+  if (cached !== null && cached !== undefined) return cached;
 
   const page = await safeDb(
     () => prisma.page.findFirst({
       where: { slug: dbSlug, published: true, locale: loc },
     }),
-    null
+    null,
+    `getPageBySlug(${slug})`
   );
 
-  if (!page && loc !== "en") {
-    return safeDb(
+  if (!page && loc !== DEFAULT_LOCALE) {
+    const enPage = await safeDb(
       () => prisma.page.findFirst({
-        where: { slug, published: true, locale: "en" },
+        where: { slug, published: true, locale: DEFAULT_LOCALE },
       }),
-      null
+      null,
+      `getPageBySlug-en(${slug})`
     );
+    if (enPage) cacheSet(cacheKey, enPage);
+    return enPage;
   }
 
+  if (page) cacheSet(cacheKey, page);
   return page;
 }
 
 export async function getAllPublishedPages(locale?: string) {
-  const loc = normalizeLocale(locale);
-  const pages = await safeDb(
-    () => prisma.page.findMany({
-      where: { published: true, locale: loc },
-      orderBy: { slug: "asc" },
-    }),
-    []
-  );
-
-  if (pages.length === 0 && loc !== "en") {
-    return safeDb(
+  return withLocaleFallback(
+    (loc) => safeDb(
       () => prisma.page.findMany({
-        where: { published: true, locale: "en" },
+        where: { published: true, locale: loc },
         orderBy: { slug: "asc" },
       }),
-      []
-    );
-  }
-
-  return pages;
+      [],
+      `getAllPublishedPages(${loc})`
+    ),
+    locale,
+    CACHE_KEYS.PAGES
+  );
 }
 
 // ─── Public Products ─────────────────────────
 
 export async function getPublishedProducts(locale?: string) {
-  const loc = normalizeLocale(locale);
-  const products = await safeDb(
-    () => prisma.product.findMany({
-      where: { published: true, locale: loc },
-      orderBy: { createdAt: "desc" },
-      include: {
-        categories: true,
-        images: { orderBy: { sortOrder: "asc" } },
-        specs: { orderBy: { sortOrder: "asc" } },
-        tabs: { orderBy: { sortOrder: "asc" } },
-      },
-    }),
-    []
-  );
-
-  if (products.length === 0 && loc !== "en") {
-    return safeDb(
+  return withLocaleFallback(
+    (loc) => safeDb(
       () => prisma.product.findMany({
-        where: { published: true, locale: "en" },
+        where: { published: true, locale: loc },
         orderBy: { createdAt: "desc" },
         include: {
           categories: true,
           images: { orderBy: { sortOrder: "asc" } },
           specs: { orderBy: { sortOrder: "asc" } },
-        tabs: { orderBy: { sortOrder: "asc" } },
+          tabs: { orderBy: { sortOrder: "asc" } },
         },
       }),
-      []
-    );
-  }
-
-  return products;
+      [],
+      `getPublishedProducts(${loc})`
+    ),
+    locale,
+    CACHE_KEYS.PRODUCTS
+  );
 }
 
 export async function getProductBySlug(slug: string, locale?: string) {
   const loc = normalizeLocale(locale);
   const dbSlug = resolveDbSlug(slug, loc);
+  const cacheKey = `product:${dbSlug}:${loc}`;
+
+  const cached = cacheGet<any>(cacheKey);
+  if (cached !== null && cached !== undefined) return cached;
 
   const product = await safeDb(
     () => prisma.product.findFirst({
@@ -108,117 +185,119 @@ export async function getProductBySlug(slug: string, locale?: string) {
         tabs: { orderBy: { sortOrder: "asc" } },
       },
     }),
-    null
+    null,
+    `getProductBySlug(${slug})`
   );
 
-  if (!product && loc !== "en") {
-    return safeDb(
+  if (!product && loc !== DEFAULT_LOCALE) {
+    const enProduct = await safeDb(
       () => prisma.product.findFirst({
-        where: { slug, published: true, locale: "en" },
+        where: { slug, published: true, locale: DEFAULT_LOCALE },
         include: {
           categories: true,
           images: { orderBy: { sortOrder: "asc" } },
           specs: { orderBy: { sortOrder: "asc" } },
-        tabs: { orderBy: { sortOrder: "asc" } },
+          tabs: { orderBy: { sortOrder: "asc" } },
         },
       }),
-      null
+      null,
+      `getProductBySlug-en(${slug})`
     );
+    if (enProduct) cacheSet(cacheKey, enProduct);
+    return enProduct;
   }
 
+  if (product) cacheSet(cacheKey, product);
   return product;
 }
 
 export async function getAllProductSlugs(locale?: string) {
   const loc = normalizeLocale(locale);
+  const cacheKey = `product-slugs:${loc}`;
+
+  const cached = cacheGet<{ slug: string }[]>(cacheKey);
+  if (cached) return cached.map((p) => cleanSlug(p.slug));
+
   const products = await safeDb(async () => {
     return await prisma.product.findMany({
       where: { published: true, locale: loc },
       select: { slug: true },
     });
-  }, []);
+  }, [], `getAllProductSlugs(${loc})`);
 
-  if (products.length === 0 && loc !== "en") {
+  if (products.length === 0 && loc !== DEFAULT_LOCALE) {
     const enProducts = await safeDb(async () => {
       return await prisma.product.findMany({
-        where: { published: true, locale: "en" },
+        where: { published: true, locale: DEFAULT_LOCALE },
         select: { slug: true },
       });
-    }, []);
-    return enProducts.map((p: any) => cleanSlug(p.slug));
+    }, [], `getAllProductSlugs-en(${loc})`);
+    cacheSet(cacheKey, enProducts);
+    return enProducts.map((p) => cleanSlug(p.slug));
   }
 
-  return products.map((p: any) => cleanSlug(p.slug));
+  cacheSet(cacheKey, products);
+  return products.map((p) => cleanSlug(p.slug));
 }
 
 // ─── Public Posts ────────────────────────────
 
 export async function getPublishedPosts(locale?: string) {
-  const loc = normalizeLocale(locale);
-  const posts = await safeDb(
-    () => prisma.post.findMany({
-      where: { published: true, locale: loc },
-      orderBy: { createdAt: "desc" },
-    }),
-    []
-  );
-
-  if (posts.length === 0 && loc !== "en") {
-    return safeDb(
+  return withLocaleFallback(
+    (loc) => safeDb(
       () => prisma.post.findMany({
-        where: { published: true, locale: "en" },
+        where: { published: true, locale: loc },
         orderBy: { createdAt: "desc" },
       }),
-      []
-    );
-  }
-
-  return posts;
+      [],
+      `getPublishedPosts(${loc})`
+    ),
+    locale,
+    CACHE_KEYS.POSTS
+  );
 }
 
 export async function getPostBySlug(slug: string, locale?: string) {
-  const loc = normalizeLocale(locale);
-  const dbSlug = resolveDbSlug(slug, loc);
-
-  const post = await safeDb(
-    () => prisma.post.findFirst({
-      where: { slug: dbSlug, published: true },
-    }),
-    null
-  );
-
-  if (!post && loc !== "en") {
-    return safeDb(
+  return withLocaleFallbackSingle(
+    (loc) => safeDb(
       () => prisma.post.findFirst({
-        where: { slug, published: true, locale: "en" },
+        where: { slug: resolveDbSlug(slug, loc), published: true },
       }),
-      null
-    );
-  }
-
-  return post;
+      null,
+      `getPostBySlug(${slug})`
+    ),
+    locale,
+    `post:${slug}`
+  );
 }
 
 export async function getAllPostSlugs(locale?: string) {
   const loc = normalizeLocale(locale);
+  const cacheKey = `post-slugs:${loc}`;
+
+  const cached = cacheGet<{ slug: string }[]>(cacheKey);
+  if (cached) return cached.map((p) => cleanSlug(p.slug));
+
   const posts = await safeDb(async () => {
     return await prisma.post.findMany({
       where: { published: true, locale: loc },
       select: { slug: true },
     });
-  }, []);
+  }, [], `getAllPostSlugs(${loc})`);
 
-  if (posts.length === 0 && loc !== "en") {
+  if (posts.length === 0 && loc !== DEFAULT_LOCALE) {
     const enPosts = await safeDb(async () => {
       return await prisma.post.findMany({
-        where: { published: true, locale: "en" },
+        where: { published: true, locale: DEFAULT_LOCALE },
         select: { slug: true },
       });
-    }, []);
-    return enPosts.map((p: any) => cleanSlug(p.slug));
+    }, [], `getAllPostSlugs-en(${loc})`);
+    cacheSet(cacheKey, enPosts);
+    return enPosts.map((p) => cleanSlug(p.slug));
   }
 
-  return posts.map((p: any) => cleanSlug(p.slug));
+  cacheSet(cacheKey, posts);
+  return posts.map((p) => cleanSlug(p.slug));
 }
 
 // ─── Settings ────────────────────────────────
@@ -243,96 +322,79 @@ const DEFAULT_SETTINGS: Record<string, string> = {
 };
 
 export async function getSiteSettings(): Promise<Record<string, string>> {
-  return safeDb(async () => {
-    const settings = await prisma.siteSetting.findMany();
+  const cached = cacheGet<Record<string, string>>(CACHE_KEYS.SETTINGS);
+  if (cached) return cached;
+
+  const settings = await safeDb(async () => {
+    const rows = await prisma.siteSetting.findMany();
     const map: Record<string, string> = { ...DEFAULT_SETTINGS };
-    for (const s of settings) map[s.key] = s.value;
+    for (const s of rows) map[s.key] = s.value;
     return map;
-  }, DEFAULT_SETTINGS);
+  }, DEFAULT_SETTINGS, "getSiteSettings");
+
+  cacheSet(CACHE_KEYS.SETTINGS, settings);
+  return settings;
 }
 
 // ─── Products by category (locale-aware) ─────
 
 export async function getProductsByCategory(slug: string, locale?: string) {
-  const loc = normalizeLocale(locale);
-  const products = await safeDb(
-    () => prisma.product.findMany({
-      where: {
-        published: true,
-        locale: loc,
-        categories: { some: { slug } },
-      },
-      include: {
-        categories: true,
-        images: { orderBy: { sortOrder: "asc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    []
-  );
-
-  if (products.length === 0 && loc !== "en") {
-    return safeDb(
+  return withLocaleFallback(
+    (loc) => safeDb(
       () => prisma.product.findMany({
         where: {
           published: true,
-          locale: "en",
+          locale: loc,
           categories: { some: { slug } },
         },
-        include: {
-          categories: true,
-          images: { orderBy: { sortOrder: "asc" } },
-        },
+        include: { categories: true, images: { orderBy: { sortOrder: "asc" } } },
         orderBy: { createdAt: "desc" },
       }),
-      []
-    );
-  }
-
-  return products;
+      [],
+      `getProductsByCategory(${slug})`
+    ),
+    locale,
+    `${CACHE_KEYS.PRODUCTS_BY_CATEGORY}:${slug}`
+  );
 }
 
 // ─── Categories (locale-aware) ───────────────
 
 export async function getAllCategories(locale?: string) {
-  const loc = normalizeLocale(locale);
-  const cats = await safeDb(
-    () => prisma.category.findMany({
-      where: { locale: loc },
-      orderBy: { sortOrder: "asc" },
-    }),
-    []
-  );
-  if (cats.length === 0 && loc !== "en") {
-    return safeDb(
+  return withLocaleFallback(
+    (loc) => safeDb(
       () => prisma.category.findMany({
-        where: { locale: "en" },
+        where: { locale: loc },
         orderBy: { sortOrder: "asc" },
       }),
-      []
-    );
-  }
-  return cats;
+      [],
+      `getAllCategories(${loc})`
+    ),
+    locale,
+    CACHE_KEYS.CATEGORIES
+  );
 }
 
 export async function getCategoryBySlug(slug: string, locale?: string) {
+  const cacheKey = `${CACHE_KEYS.CATEGORY}:${slug}:${locale || DEFAULT_LOCALE}`;
+  const cached = cacheGet<any>(cacheKey);
+  if (cached !== null && cached !== undefined) return cached;
+
   const loc = normalizeLocale(locale);
-  // Try translated version first
-  const cat = await safeDb(
-    () => prisma.category.findFirst({
-      where: { slug, locale: loc },
-    }),
-    null
+  let cat = await safeDb(
+    () => prisma.category.findFirst({ where: { slug, locale: loc } }),
+    null,
+    `getCategoryBySlug(${slug})`
   );
-  if (cat) return cat;
-  // Fallback to English
-  if (loc !== "en") {
-    return safeDb(
-      () => prisma.category.findFirst({
-        where: { slug, locale: "en" },
-      }),
-      null
+
+  if (!cat && loc !== DEFAULT_LOCALE) {
+    cat = await safeDb(
+      () => prisma.category.findFirst({ where: { slug, locale: DEFAULT_LOCALE } }),
+      null,
+      `getCategoryBySlug-en(${slug})`
     );
   }
+
+  if (cat) cacheSet(cacheKey, cat);
   return cat;
 }

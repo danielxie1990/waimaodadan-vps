@@ -64,8 +64,14 @@ export async function optimizeImage(
 }
 
 /**
+ * @deprecated Use `getWebpUrl` from `@/lib/webp-url` and `getImageUrl` from here instead.
+ */
+export { getWebpUrl } from "./webp-url";
+
+/**
  * Get the best available URL for an image.
- * Prefers WebP, falls back to original.
+ * Prefers generated WebP variants, falls back to original.
+ * Uses the file naming convention from `optimizeImage()`.
  */
 export function getImageUrl(
   originalUrl: string,
@@ -85,29 +91,4 @@ export function getImageUrl(
     return `${base}-med.webp`;
   }
   return `${base}.webp`;
-}
-
-/**
- * Server-side helper: rewrites an image URL to its WebP version.
- * Works in both server and client components without JS.
- * If the original is not an image or already WebP, returns as-is.
- */
-export function getWebpUrl(originalUrl: string | null | undefined): string {
-  if (!originalUrl) return "";
-  if (originalUrl.endsWith(".webp")) return originalUrl;
-  if (originalUrl.startsWith("data:")) return originalUrl;
-  if (originalUrl.startsWith("http")) return originalUrl;
-
-  const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-  const ext = originalUrl.substring(originalUrl.lastIndexOf(".")).toLowerCase();
-  if (!imageExts.includes(ext)) return originalUrl;
-
-  return originalUrl.replace(/\.[^.]+$/, ".webp");
-}
-
-/**
- * Get fallback original URL (for browsers that don't support WebP).
- */
-export function getOriginalUrl(originalUrl: string): string {
-  return originalUrl;
 }

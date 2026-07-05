@@ -37,6 +37,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
   });
 
+  // Invalidate page cache so frontend picks up changes immediately
+  const { invalidateCache } = await import("@/lib/db");
+  invalidateCache("PAGES");
+  invalidateCache("PAGE");
+
   return ok(page);
 }
 

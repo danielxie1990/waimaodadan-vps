@@ -35,7 +35,7 @@ export const heroBlock: BlockDefinition = {
         <h1 style={{ fontSize: 44, fontWeight: 700, marginBottom: 20, lineHeight: 1.15, color: "#fff", letterSpacing: "-0.02em" }}>{data.title}</h1>
         <p style={{ fontSize: 18, color: "#9ca3af", maxWidth: 640, margin: "0 auto 36px", lineHeight: 1.65 }}>{data.subtitle}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          {data.btn1_text && <Link href={data.btn1_url || "#"} style={{ padding: "14px 32px", background: "#dc2626", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 15 }}>{data.btn1_text}</Link>}
+          {data.btn1_text && <Link href={data.btn1_url || "#"} style={{ padding: "14px 32px", background: "var(--primary, #dc2626)", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 15 }}>{data.btn1_text}</Link>}
           {data.btn2_text && <Link href={data.btn2_url || "#"} style={{ padding: "14px 32px", background: "transparent", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 15, border: "1px solid #374151" }}>{data.btn2_text}</Link>}
         </div>
       </div>
@@ -212,7 +212,7 @@ export const ctaBlock: BlockDefinition = {
       <div style={containerStyle}>
         <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 12, color: "#fff" }}>{data.title}</h2>
         <p style={{ color: "#9ca3af", marginBottom: 28, maxWidth: 480, margin: "0 auto 28px", lineHeight: 1.6 }}>{data.subtitle}</p>
-        {data.btn_text && <Link href={data.btn_url || "/contact"} style={{ padding: "14px 32px", background: "#dc2626", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 15 }}>{data.btn_text}</Link>}
+        {data.btn_text && <Link href={data.btn_url || "/contact"} style={{ padding: "14px 32px", background: "var(--primary, #dc2626)", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 15 }}>{data.btn_text}</Link>}
       </div>
     </section>
   ),
@@ -291,7 +291,7 @@ function renderColItem(item: any, idx: number) {
       const btnKey = idx;
       if (!d.text) return null;
       // Can't use Link in client component, use a
-      const btn = <a href={d.url || "#"} key={btnKey} style={{ display: "inline-block", padding: "10px 24px", borderRadius: 6, fontSize: 14, fontWeight: 600, textDecoration: "none", marginBottom: 8, background: isSolid ? "#dc2626" : "transparent", color: isSolid ? "#fff" : "#dc2626", border: isSolid ? "none" : "1px solid #dc2626" }}>{d.text}</a>;
+      const btn = <a href={d.url || "#"} key={btnKey} style={{ display: "inline-block", padding: "10px 24px", borderRadius: 6, fontSize: 14, fontWeight: 600, textDecoration: "none", marginBottom: 8, background: isSolid ? "var(--primary, #dc2626)" : "transparent", color: isSolid ? "#fff" : "var(--primary, #dc2626)", border: isSolid ? "none" : "1px solid var(--primary, #dc2626)" }}>{d.text}</a>;
       return <div key={btnKey} style={{ marginBottom: 8 }}>{btn}</div>;
     default:
       return null;

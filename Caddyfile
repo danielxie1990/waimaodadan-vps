@@ -1,0 +1,57 @@
+# ─── Caddy Configuration ──────────────────────────
+# Replace waimaodadan.com with your actual domain.
+# Caddy automatically provisions Let's Encrypt TLS certificates.
+
+waimaodadan.com {
+    # ── Compression ──
+    encode gzip zstd
+
+    # ── Static files: served directly by Caddy, NOT through Node.js ──
+    # Images, uploads, and built assets bypass the Next.js process entirely.
+    handle_path /uploads/* {
+        root * /var/www/waimaodadan/public
+        file_server
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    handle_path /_next/static/* {
+        root * /var/www/waimaodadan
+        file_server
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    handle_path /favicon* {
+        root * /var/www/waimaodadan/public
+        file_server
+    }
+
+    handle_path /robots.txt {
+        root * /var/www/waimaodadan/public
+        file_server
+    }
+
+    handle_path /sitemap.xml {
+        root * /var/www/waimaodadan/public
+        file_server
+    }
+
+    # ── Everything else: reverse proxy to Next.js ──
+    reverse_proxy localhost:3000 {
+        # Forward real client IP
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    # ── Security headers ──
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # ── Logs ──
+    log {
+        output file /var/log/caddy/waimaodadan.log
+    }
+}

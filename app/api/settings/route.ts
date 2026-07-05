@@ -26,5 +26,9 @@ export async function PUT(req: NextRequest) {
     });
   }
 
+  // Invalidate settings cache so frontend picks up changes immediately
+  const { invalidateCache } = await import("@/lib/db");
+  invalidateCache("SETTINGS");
+
   return ok({ saved: true });
 }
