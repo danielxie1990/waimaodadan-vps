@@ -1,37 +1,40 @@
 # ─── Caddy Configuration ──────────────────────────
-# Replace waimaodadan.com with your actual domain.
+# Replace "example.com" with your actual domain.
 # Caddy automatically provisions Let's Encrypt TLS certificates.
+#
+# If you don't have a domain yet, access via http://SERVER_IP:3000
+# (Docker will serve on port 3000 without a domain too.)
 
-waimaodadan.com {
+example.com {
     # ── Compression ──
     encode gzip zstd
 
     # ── Static files: served directly by Caddy, NOT through Node.js ──
     # Images, uploads, and built assets bypass the Next.js process entirely.
     handle_path /uploads/* {
-        root * /var/www/waimaodadan/public
+        root * /var/www/your-site/public
         file_server
         header Cache-Control "public, max-age=31536000, immutable"
     }
 
     handle_path /_next/static/* {
-        root * /var/www/waimaodadan
+        root * /var/www/your-site
         file_server
         header Cache-Control "public, max-age=31536000, immutable"
     }
 
     handle_path /favicon* {
-        root * /var/www/waimaodadan/public
+        root * /var/www/your-site/public
         file_server
     }
 
     handle_path /robots.txt {
-        root * /var/www/waimaodadan/public
+        root * /var/www/your-site/public
         file_server
     }
 
     handle_path /sitemap.xml {
-        root * /var/www/waimaodadan/public
+        root * /var/www/your-site/public
         file_server
     }
 
@@ -52,6 +55,6 @@ waimaodadan.com {
 
     # ── Logs ──
     log {
-        output file /var/log/caddy/waimaodadan.log
+        output file /var/log/caddy/your-site.log
     }
 }

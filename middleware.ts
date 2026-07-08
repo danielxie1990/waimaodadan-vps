@@ -1,8 +1,9 @@
 /**
- * 多语言路由中间件
+ * Middleware — locale detection + first-run setup redirect
  *
- * 不再 rewrite URL。只是设置 locale cookie（用于持久化和初始加载）。
- * 前端 locale-prefixed URLs（如 /zh/about-us）由 catch-all 路由处理。
+ * - Sets locale cookie for persistent language preference
+ * - Handles /tin-containers → /products redirect
+ * - Checks if setup is needed and redirects to /admin/setup
  */
 
 import { NextResponse } from "next/server";
@@ -15,10 +16,10 @@ const SUPPORTED_LOCALES = [
 
 const DEFAULT_LOCALE = "en";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Don't process static assets and API
+  // ── Bypass static assets and API ──
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/images/") ||
@@ -32,13 +33,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Redirect old /tin-containers/ to /products/
+  // ── Redirect old /tin-containers/ to /products/ ──
   if (pathname.startsWith("/tin-containers")) {
     const newPath = pathname.replace("/tin-containers", "/products");
     return NextResponse.redirect(new URL(newPath, request.url), { status: 301 });
   }
 
-  // Detect locale from URL first segment
+  // ── Detect locale from URL first segment ──
   const segments = pathname.split("/").filter(Boolean);
   let locale = DEFAULT_LOCALE;
   if (segments.length > 0 && SUPPORTED_LOCALES.includes(segments[0])) {
@@ -58,6 +59,14 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|images/).*)",
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images, uploads (public assets)
+     */
+    "/((?!api|_next/static|_next/image|favicon|images|uploads|robots.txt|sitemap.xml).*)",
   ],
 };

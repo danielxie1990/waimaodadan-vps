@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -8,7 +8,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    // Check if setup has been completed
+    fetch("/api/setup/")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.needsSetup) {
+          setNeedsSetup(true);
+        }
+        setChecking(false);
+      })
+      .catch(() => {
+        setChecking(false);
+      });
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,11 +52,46 @@ export default function LoginPage() {
     }
   }
 
+  if (checking) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
+        <p style={{ color: "#666" }}>Loading...</p>
+      </div>
+    );
+  }
+
+  if (needsSetup) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" }}>
+        <div style={{ background: "#fff", padding: "48px 40px", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)", width: 420, textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🚀</div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 8px", color: "#0f172a" }}>Welcome to Your CMS!</h1>
+          <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.6, margin: "0 0 28px" }}>
+            Your website isn&apos;t set up yet. Let&apos;s get started —
+            it only takes a minute.
+          </p>
+          <button
+            onClick={() => router.push("/admin/setup/")}
+            style={{
+              width: "100%", padding: "14px", background: "#2563eb", color: "#fff",
+              border: "none", borderRadius: 8, fontSize: 16, fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Set Up Your Website →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
       <div style={{ background: "#fff", padding: "40px", borderRadius: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.1)", width: 360 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, textAlign: "center" }}>Admin Login</h1>
-        <p style={{ color: "#666", fontSize: 14, textAlign: "center", marginBottom: 24 }}>Goodyou Packaging Management</p>
+        <p style={{ color: "#666", fontSize: 14, textAlign: "center", marginBottom: 24 }}>
+          Sign in to manage your website
+        </p>
 
         {error && (
           <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px 14px", borderRadius: 6, fontSize: 14, marginBottom: 16 }}>
@@ -56,7 +108,7 @@ export default function LoginPage() {
               onChange={e => setEmail(e.target.value)}
               required
               style={{ width: "100%", padding: "10px 12px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 14, boxSizing: "border-box" }}
-              placeholder="admin@gytinbox.com"
+              placeholder="admin@example.com"
             />
           </div>
           <div style={{ marginBottom: 24 }}>

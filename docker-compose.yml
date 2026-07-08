@@ -1,23 +1,6 @@
 version: "3.8"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: product_site
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: change-me-in-production
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   app:
     build:
       context: .
@@ -26,14 +9,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: "postgresql://app:change-me-in-production@postgres:5432/product_site"
-      JWT_SECRET: "6b241f3b44f4484efafa5d239d53316e228b2a12823e14ebfa5abfb4be4da4e1"
+      # SQLite — zero setup, data persists in the volume below
+      DATABASE_URL: "file:./data/dev.db"
+      JWT_SECRET: "${JWT_SECRET:-change-this-to-a-random-string-in-production}"
       NODE_ENV: production
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      # Persist SQLite database across restarts
+      - sqldata:/app/prisma/data
+    # Auto-migrate database on startup, then start the app
     entrypoint: >
-      sh -c "npx prisma migrate deploy && npm start"
+      sh -c "
+        echo '→ Running database migrations...' &&
+        npx prisma migrate deploy 2>&1 | tail -3 &&
+        echo '→ Starting application...' &&
+        node server.js
+      "
 
 volumes:
-  pgdata:
+  sqldata:
