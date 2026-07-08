@@ -4,13 +4,19 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
 COPY . .
 
+# Create database + generate client so Prisma can read schema during build
+RUN mkdir -p prisma/data && cp dev.db prisma/data/ 2>/dev/null; \
+    DATABASE_URL="file:./data/dev.db" npx prisma db push --skip-generate 2>&1 | head -10
+
 RUN npx prisma generate
+
 RUN npm run build
 
 # ─── Production Stage ─────────────────────────
